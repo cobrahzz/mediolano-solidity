@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-/// @dev Compat pour tokens ERC20 qui ne retournent pas bool (ou mal).
 library SafeERC20Compat {
     function _callOptionalReturn(address token, bytes memory data) private {
         (bool ok, bytes memory ret) = token.call(data);
