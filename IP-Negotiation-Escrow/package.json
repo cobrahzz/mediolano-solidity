@@ -1,0 +1,20 @@
+{
+  "name": "ip-negotiation-escrow",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "hardhat compile",
+    "test": "hardhat test",
+    "clean": "hardhat clean"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "chai": "^4.4.1",
+    "hardhat": "^2.22.8",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5",
+    "@types/node": "^20.12.12",
+    "@types/chai": "^4.3.16",
+    "@types/mocha": "^10.0.6"
+  }
+}
