@@ -1,0 +1,17 @@
+{
+  "type": "module",
+  "ts-node": {
+    "compilerOptions": {
+      "module": "CommonJS",
+      "moduleResolution": "Node"
+    },
+    "transpileOnly": true
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^6.1.0",
+    "@types/node": "^24.3.1",
+    "hardhat": "^3.0.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
+  }
+}

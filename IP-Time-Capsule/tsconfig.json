@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "strict": true,
+    "types": ["node", "chai", "mocha", "hardhat"],
+    "skipLibCheck": true
+  },
+  "include": ["hardhat.config.ts", "src", "test"]
+}
