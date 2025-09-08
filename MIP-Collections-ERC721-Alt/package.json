@@ -1,0 +1,27 @@
+{
+  "name": "mip-collections-erc721-alt",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "clean": "hardhat clean",
+    "compile": "hardhat compile",
+    "test": "hardhat test"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@types/chai": "^4.3.20",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.12.12",
+    "chai": "^4.4.1",
+    "ethers": "^6.12.1",
+    "hardhat": "^2.26.3",
+    "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.1.0"
+  },
+  "engines": {
+    "node": ">=18.18.0"
+  }
+}
