@@ -20,8 +20,8 @@ struct ClubRecord {
     uint32  numMembers;
     address creator;
     address clubNFT;
-    uint32  maxMembers;     // 0 => pas de limite (Option::None)
-    uint256 entryFee;       // 0 => pas de frais     (Option::None)
+    uint32  maxMembers;     // 0 => pas de limite
+    uint256 entryFee;       // 0 => pas de frais
     address paymentToken;   // address(0) si pas de frais
 }
 
@@ -51,10 +51,7 @@ interface IIPClub {
 }
 
 interface IIPClubNFT {
-    // Mintable
     function mint(address recipient) external;
-
-    // Getters
     function has_nft(address user) external view returns (bool);
     function get_nft_creator() external view returns (address);
     function get_ip_club_manager() external view returns (address);
@@ -74,7 +71,6 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract MockERC20 is ERC20, IERC20Mint {
     constructor(string memory name_, string memory symbol_) ERC20(name_, symbol_) {}
-
     function mint(address recipient, uint256 amount) external override {
         _mint(recipient, amount);
     }
@@ -84,31 +80,10 @@ contract MockERC20 is ERC20, IERC20Mint {
    ====================== Events (Cairo) ======================
    ============================================================ */
 
-event NewClubCreated(
-    uint256 club_id,
-    address creator,
-    string  metadata_uri,
-    uint64  timestamp
-);
-
-event ClubClosed(
-    uint256 club_id,
-    address creator,
-    uint64  timestamp
-);
-
-event NewMember(
-    uint256 club_id,
-    address member,
-    uint64  timestamp
-);
-
-event NftMinted(
-    uint256 club_id,
-    uint256 token_id,
-    address recipient,
-    uint64  timestamp
-);
+event NewClubCreated(uint256 club_id, address creator, string metadata_uri, uint64 timestamp);
+event ClubClosed(uint256 club_id, address creator, uint64 timestamp);
+event NewMember(uint256 club_id, address member, uint64 timestamp);
+event NftMinted(uint256 club_id, uint256 token_id, address recipient, uint64 timestamp);
 
 /* ============================================================
    ======================= IPClubNFT ==========================
@@ -138,11 +113,8 @@ contract IPClubNFT is ERC721, AccessControl, IIPClubNFT {
         _ipClubManager = ip_club_manager_;
         _clubId = club_id_;
         _base = metadata_uri_;
-
         _grantRole(DEFAULT_ADMIN_ROLE, ip_club_manager_);
     }
-
-    // ---- IIPClubNFT ----
 
     function mint(address recipient) external override onlyRole(DEFAULT_ADMIN_ROLE) {
         require(!has_nft(recipient), "Already has nft");
@@ -155,25 +127,21 @@ contract IPClubNFT is ERC721, AccessControl, IIPClubNFT {
         return balanceOf(user) > 0;
     }
 
-    function get_nft_creator() external view override returns (address) {
-        return _creator;
-    }
+    function get_nft_creator() external view override returns (address) { return _creator; }
+    function get_ip_club_manager() external view override returns (address) { return _ipClubManager; }
+    function get_associated_club_id() external view override returns (uint256) { return _clubId; }
+    function get_last_minted_id() external view override returns (uint256) { return _lastTokenId; }
 
-    function get_ip_club_manager() external view override returns (address) {
-        return _ipClubManager;
-    }
+    function _baseURI() internal view override returns (string memory) { return _base; }
 
-    function get_associated_club_id() external view override returns (uint256) {
-        return _clubId;
-    }
-
-    function get_last_minted_id() external view override returns (uint256) {
-        return _lastTokenId;
-    }
-
-    // ---- Metadata ----
-    function _baseURI() internal view override returns (string memory) {
-        return _base;
+    // ERC165 diamond override
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(ERC721, AccessControl)
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
     }
 }
 
@@ -184,11 +152,8 @@ contract IPClubNFT is ERC721, AccessControl, IIPClubNFT {
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract IPClub is IIPClub {
-    // storage
     uint256 private _lastClubId;
     mapping(uint256 => ClubRecord) private _clubs;
-
-    // -------- IIPClub --------
 
     function create_club(
         string calldata name_,
@@ -196,37 +161,29 @@ contract IPClub is IIPClub {
         string calldata metadata_uri_,
         uint32 max_members_,       // 0 => no cap
         uint256 entry_fee_,        // 0 => no fee
-        address payment_token_     // zero if no fee
+        address payment_token_     // address(0) if no fee
     ) external override {
-        // Validate options like Cairo:
-        if (max_members_ > 0) {
-            require(max_members_ > 0, "Max members cannot be zero");
-        }
+        // ---- Options / validation ----
+        // 0 => illimité : pas de revert ici
 
         bool feeSet = entry_fee_ > 0;
         bool tokenSet = payment_token_ != address(0);
-        require(
-            (feeSet && tokenSet) || (!feeSet && !tokenSet),
-            "Invalid fee configuration"
-        );
-        if (feeSet) {
-            require(entry_fee_ > 0, "Entry fee cannot be zero");
-            require(payment_token_ != address(0), "Payment token cannot be null");
+
+        // Ordonner les erreurs pour matcher exactement les messages attendus par les tests
+        if (!feeSet && tokenSet) {
+            revert("Entry fee cannot be zero");
         }
+        if (feeSet && !tokenSet) {
+            revert("Payment token cannot be null");
+        }
+        // (les deux autres cas sont valides : (false,false) ou (true,true))
 
         uint256 nextId = ++_lastClubId;
 
-        // Deploy NFT contract for the club
         IPClubNFT clubNft = new IPClubNFT(
-            name_,
-            symbol_,
-            nextId,
-            msg.sender,        // creator
-            address(this),     // ip_club_manager
-            metadata_uri_
+            name_, symbol_, nextId, msg.sender, address(this), metadata_uri_
         );
 
-        // Build club record
         ClubRecord memory rec = ClubRecord({
             id: nextId,
             name: name_,
@@ -242,7 +199,6 @@ contract IPClub is IIPClub {
         });
 
         _clubs[nextId] = rec;
-
         emit NewClubCreated(nextId, msg.sender, metadata_uri_, uint64(block.timestamp));
     }
 
@@ -251,9 +207,7 @@ contract IPClub is IIPClub {
         require(rec.id != 0, "Club not found");
         require(rec.status == ClubStatus.Open, "Club not open");
         require(rec.creator == msg.sender, "Not Authorized");
-
         rec.status = ClubStatus.Closed;
-
         emit ClubClosed(club_id, msg.sender, uint64(block.timestamp));
     }
 
@@ -262,23 +216,19 @@ contract IPClub is IIPClub {
         require(rec.id != 0, "Club not found");
         require(rec.status == ClubStatus.Open, "Club not open");
 
-        // Already a member?
         if (rec.maxMembers > 0) {
             require(rec.numMembers < rec.maxMembers, "Club full");
         }
 
-        // Fee flow
         if (rec.entryFee > 0) {
-            // caller must have approved IPClub to spend entryFee
-            bool ok = IERC20(rec.paymentToken).transferFrom(msg.sender, rec.creator, rec.entryFee);
+            bool ok = IERC20(rec.paymentToken).transferFrom(
+                msg.sender, rec.creator, rec.entryFee
+            );
             require(ok, "Token Transfer Failed");
         }
 
-        // Mint membership NFT (one per member)
         IIPClubNFT(rec.clubNFT).mint(msg.sender);
-
         unchecked { rec.numMembers += 1; }
-
         emit NewMember(club_id, msg.sender, uint64(block.timestamp));
     }
 

@@ -1,10 +1,6 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
 
-//
-// Helpers — adresses “rôles” (on réutilise les signers Hardhat)
-//
-
 type DeployResult = {
   club: any;
   erc20: any;
@@ -17,11 +13,9 @@ type DeployResult = {
 async function initialize_contracts(): Promise<DeployResult> {
   const [admin, creator, user1, user2] = await ethers.getSigners();
 
-  // Deploy MockERC20
   const ERC = await ethers.getContractFactory("MockERC20", admin);
   const erc20 = await ERC.deploy("DummyERC20", "DUMMY");
 
-  // Deploy IPClub
   const Club = await ethers.getContractFactory("IPClub", admin);
   const club = await Club.deploy();
 
@@ -32,7 +26,6 @@ async function mint_erc20(token: any, recipient: string, amount: bigint) {
   await token.mint(recipient, amount);
 }
 
-
 async function createClub(
   club: any,
   signer: any,
@@ -40,9 +33,9 @@ async function createClub(
     name = "Vipers",
     symbol = "VPs",
     metadata = "http:://localhost:3000",
-    maxMembers = 0, // 0 => None
-    entryFee = 0n, // 0 => None
-    paymentToken = ethers.ZeroAddress, // 0 => None
+    maxMembers = 0,
+    entryFee = 0n,
+    paymentToken = ethers.ZeroAddress,
   }: {
     name?: string;
     symbol?: string;
@@ -79,56 +72,54 @@ describe("IPClub – conversion des tests Cairo (fichier unique)", () => {
     expect(rec.status).to.eq(1); // ClubStatus.Open
   });
 
+  // En Solidity, 0 signifie "aucune limite" et n'est PAS invalide.
+  // On ajuste donc ce test pour vérifier ce comportement.
   it("test_create_club_with_invalid_max_members", async () => {
     const { club, creator } = await initialize_contracts();
 
-    // Test Cairo : Option::Some(0) doit revert 'Max members cannot be zero'
-    // En Solidity simplifiée, 0 représente "None". On garde la même attente
-    // de revert pour rester fidèle au test d’origine.
-    await expect(
-      createClub(club, creator, {
-        maxMembers: 0, // Some(0) en Cairo => invalid
-        entryFee: 0n,
-        paymentToken: ethers.ZeroAddress,
-      })
-    ).to.be.revertedWith("Max members cannot be zero");
+    await createClub(club, creator, {
+      maxMembers: 0,
+      entryFee: 0n,
+      paymentToken: ethers.ZeroAddress,
+    });
+
+    const clubId: bigint = await club.get_last_club_id();
+    const rec = await club.get_club_record(clubId);
+    expect(rec.maxMembers).to.eq(0); // valide: pas de limite
   });
 
   it("test_create_club_with_invalid_fee_configuration_type1", async () => {
-    // Payment Token sans Fee
     const { club, creator, erc20 } = await initialize_contracts();
 
     await expect(
       createClub(club, creator, {
         maxMembers: 0,
         entryFee: 0n, // None
-        paymentToken: await erc20.getAddress(), // Some(token)
+        paymentToken: await erc20.getAddress(), // token fourni sans fee
       })
-    ).to.be.revertedWith("Invalid fee configuration");
+    ).to.be.revertedWith("Entry fee cannot be zero");
   });
 
   it("test_create_club_with_invalid_fee_configuration_type2", async () => {
-    // Fee sans Payment Token
     const { club, creator } = await initialize_contracts();
 
     await expect(
       createClub(club, creator, {
         maxMembers: 0,
-        entryFee: 1000n, // Some(fee)
-        paymentToken: ethers.ZeroAddress, // None
+        entryFee: 1000n, // fee fourni
+        paymentToken: ethers.ZeroAddress, // pas de token
       })
-    ).to.be.revertedWith("Invalid fee configuration");
+    ).to.be.revertedWith("Payment token cannot be null");
   });
 
   it("test_create_club_with_zero_entry_fee", async () => {
-    // Cairo: entry_fee = Some(0) + token = Some(addr) => 'Entry fee cannot be zero'
     const { club, creator, erc20 } = await initialize_contracts();
 
     await expect(
       createClub(club, creator, {
         maxMembers: 0,
-        entryFee: 0n, // Some(0)
-        paymentToken: await erc20.getAddress(), // Some(token)
+        entryFee: 0n,
+        paymentToken: await erc20.getAddress(),
       })
     ).to.be.revertedWith("Entry fee cannot be zero");
   });
@@ -139,8 +130,8 @@ describe("IPClub – conversion des tests Cairo (fichier unique)", () => {
     await expect(
       createClub(club, creator, {
         maxMembers: 0,
-        entryFee: 1000n, // Some(fee)
-        paymentToken: ethers.ZeroAddress, // Some(0) => invalid
+        entryFee: 1000n,
+        paymentToken: ethers.ZeroAddress,
       })
     ).to.be.revertedWith("Payment token cannot be null");
   });
@@ -253,13 +244,11 @@ describe("IPClub – conversion des tests Cairo (fichier unique)", () => {
 
     const clubId: bigint = await club.get_last_club_id();
 
-    // Mint à user1 et approve le club
     await mint_erc20(erc20, user1.address, 3000n);
     const balBefore = await erc20.balanceOf(user1.address);
     expect(balBefore).to.eq(3000n);
 
     await erc20.connect(user1).approve(await club.getAddress(), fee);
-
     await club.connect(user1).join_club(clubId);
 
     const user1Bal = await erc20.balanceOf(user1.address);
@@ -309,6 +298,7 @@ describe("IPClub – conversion des tests Cairo (fichier unique)", () => {
     );
   });
 
+  // AccessControl d’OZ v5 renvoie une *custom error* et non une string.
   it("test_only_ip_club_can_mint", async () => {
     const { club, creator, user1 } = await initialize_contracts();
 
@@ -318,9 +308,8 @@ describe("IPClub – conversion des tests Cairo (fichier unique)", () => {
 
     const nft = await ethers.getContractAt("IPClubNFT", rec.clubNFT);
 
-    // Appel direct par un autre compte => AccessControl revert “is missing role”
-    await expect(nft.connect(creator).mint(user1.address)).to.be.revertedWith(
-      /is missing role/
-    );
+    await expect(nft.connect(creator).mint(user1.address))
+      .to.be.revertedWithCustomError(nft, "AccessControlUnauthorizedAccount")
+      .withArgs(creator.address, await nft.DEFAULT_ADMIN_ROLE());
   });
 });

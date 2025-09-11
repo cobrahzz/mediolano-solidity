@@ -7,11 +7,9 @@ import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 abstract contract BaseCore is ERC1155, Ownable, Pausable, ReentrancyGuard {
-    // Global time/supply constants
-    uint64  public constant THIRTY_DAYS            = 2_592_000;  // 30 days in seconds
+    uint64  public constant THIRTY_DAYS             = 2_592_000;
     uint256 public constant STANDARD_INITIAL_SUPPLY = 1_000;
 
-    // Common status/type constants (as bytes32)
     bytes32 internal constant _PENDING          = "PENDING";
     bytes32 internal constant _BERNE_COMPLIANT  = "BERNE_COMPLIANT";
     bytes32 internal constant _NON_COMPLIANT    = "NON_COMPLIANT";
@@ -29,7 +27,6 @@ abstract contract BaseCore is ERC1155, Ownable, Pausable, ReentrancyGuard {
     bytes32 internal constant _REVENUE_POLICY   = "REVENUE_POLICY";
     bytes32 internal constant _EMERGENCY        = "EMERGENCY";
 
-    // License status codes
     bytes32 internal constant _NOT_FOUND          = "NOT_FOUND";
     bytes32 internal constant _PENDING_APPROVAL   = "PENDING_APPROVAL";
     bytes32 internal constant _INACTIVE           = "INACTIVE";
@@ -38,26 +35,26 @@ abstract contract BaseCore is ERC1155, Ownable, Pausable, ReentrancyGuard {
     bytes32 internal constant _EXPIRED            = "EXPIRED";
     bytes32 internal constant _ACTIVE             = "ACTIVE";
 
-    // Compliance restriction codes
-    bytes32 internal constant _NO_COMPLIANCE_RECORD = "NO_COMPLIANCE_RECORD";
-    bytes32 internal constant _NO_PROTECTION        = "NO_PROTECTION";
-    bytes32 internal constant _NOTICE_REQUIRED      = "NOTICE_REQUIRED";
-    bytes32 internal constant _NO_MORAL_RIGHTS      = "NO_MORAL_RIGHTS";
-    bytes32 internal constant _REGISTRATION_REQUIRED= "REGISTRATION_REQUIRED";
+    bytes32 internal constant _NO_COMPLIANCE_RECORD  = "NO_COMPLIANCE_RECORD";
+    bytes32 internal constant _NO_PROTECTION         = "NO_PROTECTION";
+    bytes32 internal constant _NOTICE_REQUIRED       = "NOTICE_REQUIRED";
+    bytes32 internal constant _NO_MORAL_RIGHTS       = "NO_MORAL_RIGHTS";
+    bytes32 internal constant _REGISTRATION_REQUIRED = "REGISTRATION_REQUIRED";
 
-    constructor(string memory baseURI, address initialOwner) ERC1155(baseURI) {
-        // Initialize ownership to the provided address (if given)
+    constructor(address initialOwner) ERC1155("") {
         if (initialOwner != address(0)) {
             _transferOwnership(initialOwner);
         }
     }
 
-    // Utility: current timestamp (uint64)
+    function setBaseURI(string memory newURI) public onlyOwner {
+        _setURI(newURI);
+    }
+
     function _now() internal view returns (uint64) {
         return uint64(block.timestamp);
     }
 
-    // Pause hook to prevent token transfers while paused
     function _beforeTokenTransfer(
         address operator,
         address from,
@@ -69,8 +66,7 @@ abstract contract BaseCore is ERC1155, Ownable, Pausable, ReentrancyGuard {
         super._beforeTokenTransfer(operator, from, to, ids, amounts, data);
     }
 
-    // Upgrade stub (upgrade not supported in this contract)
-    function upgrade(bytes32 /*newClassHash*/) external view onlyOwner {
+    function upgrade(bytes32) external view onlyOwner {
         revert("Upgrade not supported; use proxy");
     }
 }

@@ -3,3 +3,4 @@ artifacts
 cache
 package-lock.json
 typechain-types
+hardhat-failures.txt

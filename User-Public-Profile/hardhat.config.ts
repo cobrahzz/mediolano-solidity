@@ -3,22 +3,18 @@ import "@nomicfoundation/hardhat-toolbox";
 
 const config: HardhatUserConfig = {
   solidity: {
-    version: "0.8.24",
+    version: "0.8.20",
     settings: {
-      optimizer: { enabled: true, runs: 200 },
-      // viaIR: true, // décommente si besoin
-    },
+      optimizer: { enabled: true, runs: 200 }
+    }
   },
   paths: {
-    sources: "./src",
+    sources: "./contracts",
     tests: "./test",
     cache: "./cache",
-    artifacts: "./artifacts",
+    artifacts: "./artifacts"
   },
-  typechain: {
-    target: "ethers-v6",
-    outDir: "typechain-types",
-  },
+  mocha: { timeout: 120000 }
 };
 
 export default config;

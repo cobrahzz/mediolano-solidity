@@ -4,7 +4,8 @@ pragma solidity ^0.8.20;
 import "./Governance.sol";
 
 abstract contract BerneCompliance is Governance {
-    // Compliance records and authority structs
+    constructor(address initialOwner) BaseCore(initialOwner) {}
+
     struct ComplianceRecord {
         uint256 assetId;
         bytes32 complianceStatus;
@@ -62,7 +63,6 @@ abstract contract BerneCompliance is Governance {
         string  credentialsUri;
     }
 
-    // Compliance events
     event ComplianceVerificationRequested(
         uint256 indexed requestId,
         uint256 indexed assetId,
@@ -97,7 +97,6 @@ abstract contract BerneCompliance is Governance {
     mapping(uint256 => bytes32[]) public manualRegistrationCountries;
     mapping(bytes32 => uint256[]) public assetsByStatus;
 
-    // Register a compliance authority (government or certified organization)
     function registerComplianceAuthority(
         address authority,
         string calldata name_,
@@ -123,7 +122,6 @@ abstract contract BerneCompliance is Governance {
         });
         complianceAuthorities[authority] = a;
 
-        // Set up authorized countries for this authority
         delete authorityCountries[authority];
         for (uint256 i = 0; i < authorizedCountries.length; i++) {
             bytes32 c = authorizedCountries[i];
@@ -170,8 +168,7 @@ abstract contract BerneCompliance is Governance {
     }
 
     function isAuthorizedForCountry(address authority, bytes32 country) public view returns (bool) {
-        ComplianceAuthority memory a = complianceAuthorities[authority];
-        if (!a.isActive) return false;
+        if (!complianceAuthorities[authority].isActive) return false;
         return authorityCountryAllowed[authority][country];
     }
 
@@ -184,7 +181,6 @@ abstract contract BerneCompliance is Governance {
     function getCountryRequirements(bytes32 country) public view returns (CountryComplianceRequirements memory) {
         CountryComplianceRequirements memory r = countryRequirements[country];
         if (r.countryCode == 0) {
-            // Default requirements for Berne signatories if not overridden
             return CountryComplianceRequirements({
                 countryCode: country,
                 isBerneSignatory: true,
@@ -202,31 +198,30 @@ abstract contract BerneCompliance is Governance {
 
     function getBerneSignatoryCountries() external pure returns (bytes32[] memory) {
         bytes32[] memory arr = new bytes32[](21);
-        arr[0]  = bytes32("US");
-        arr[1]  = bytes32("UK");
-        arr[2]  = bytes32("FR");
-        arr[3]  = bytes32("DE");
-        arr[4]  = bytes32("JP");
-        arr[5]  = bytes32("CA");
-        arr[6]  = bytes32("AU");
-        arr[7]  = bytes32("IT");
-        arr[8]  = bytes32("ES");
-        arr[9]  = bytes32("NL");
-        arr[10] = bytes32("SE");
-        arr[11] = bytes32("CH");
-        arr[12] = bytes32("NO");
-        arr[13] = bytes32("DK");
-        arr[14] = bytes32("FI");
-        arr[15] = bytes32("AT");
-        arr[16] = bytes32("BE");
-        arr[17] = bytes32("PT");
-        arr[18] = bytes32("GR");
-        arr[19] = bytes32("IE");
-        arr[20] = bytes32("PL");
+        arr[0]  = bytes32(bytes("US"));
+        arr[1]  = bytes32(bytes("UK"));
+        arr[2]  = bytes32(bytes("FR"));
+        arr[3]  = bytes32(bytes("DE"));
+        arr[4]  = bytes32(bytes("JP"));
+        arr[5]  = bytes32(bytes("CA"));
+        arr[6]  = bytes32(bytes("AU"));
+        arr[7]  = bytes32(bytes("IT"));
+        arr[8]  = bytes32(bytes("ES"));
+        arr[9]  = bytes32(bytes("NL"));
+        arr[10] = bytes32(bytes("SE"));
+        arr[11] = bytes32(bytes("CH"));
+        arr[12] = bytes32(bytes("NO"));
+        arr[13] = bytes32(bytes("DK"));
+        arr[14] = bytes32(bytes("FI"));
+        arr[15] = bytes32(bytes("AT"));
+        arr[16] = bytes32(bytes("BE"));
+        arr[17] = bytes32(bytes("PT"));
+        arr[18] = bytes32(bytes("GR"));
+        arr[19] = bytes32(bytes("IE"));
+        arr[20] = bytes32(bytes("PL"));
         return arr;
     }
 
-    // Asset owner requests compliance verification for their asset (e.g., to mark as Berne-compliant)
     function requestComplianceVerification(
         uint256 assetId,
         bytes32 requestedStatus,
@@ -263,7 +258,6 @@ abstract contract BerneCompliance is Governance {
         return requestId;
     }
 
-    // Compliance authority processes a verification request
     function processComplianceVerification(
         uint256 requestId,
         bool approved,
@@ -272,60 +266,62 @@ abstract contract BerneCompliance is Governance {
         bytes32[] calldata automaticCountries,
         bytes32[] calldata manualRegistration
     ) external whenNotPaused returns (bool) {
-        ComplianceAuthority memory auth = complianceAuthorities[_msgSender()];
-        require(auth.isActive, "Not an active authority");
+        require(complianceAuthorities[_msgSender()].isActive, "Not an active authority");
 
         ComplianceVerificationRequest storage req = complianceRequests[requestId];
         require(req.requestId != 0, "Request not found");
         require(!req.isProcessed, "Request already processed");
         require(isAuthorizedForCountry(_msgSender(), req.countryOfOrigin), "Not authorized for this country");
 
-        // Mark request as processed
         req.isProcessed = true;
         req.isApproved = approved;
         req.verifierNotes = verifierNotes;
 
         if (approved) {
-            // Create or update compliance record for the asset
-            ComplianceRecord storage cr = complianceRecords[req.assetId];
-            cr.assetId = req.assetId;
-            cr.complianceStatus = req.requestedStatus;
-            cr.countryOfOrigin = req.countryOfOrigin;
-            cr.publicationDate = req.publicationDate;
-            cr.registrationAuthority = _msgSender();
-            cr.verificationTimestamp = _now();
-            cr.complianceEvidenceUri = req.evidenceUri;
-            cr.automaticProtectionCount = uint32(automaticCountries.length);
-            cr.manualRegistrationCount = uint32(manualRegistration.length);
-            cr.protectionDuration = protectionDuration;
-            cr.isAnonymousWork = false;
-            cr.isCollectiveWork = (req.authorsCount > 1);
-            cr.renewalRequired = (protectionDuration > 0);
-            cr.nextRenewalDate = (protectionDuration > 0) ? uint64(_now() + protectionDuration) : 0;
-
-            // Update asset’s compliance status and authority verification count
-            assetInfo[req.assetId].complianceStatus = req.requestedStatus;
-            complianceAuthorities[_msgSender()].verificationCount += 1;
-
-            // Set international protection flags
-            for (uint256 i = 0; i < automaticCountries.length; i++) {
-                bytes32 c = automaticCountries[i];
-                internationalProtection[req.assetId][c] = true;
-                automaticProtectionCountries[req.assetId].push(c);
-            }
-            for (uint256 j = 0; j < manualRegistration.length; j++) {
-                manualRegistrationCountries[req.assetId].push(manualRegistration[j]);
-            }
-
-            emit ComplianceVerified(req.assetId, req.requestedStatus, _msgSender(), req.countryOfOrigin, protectionDuration, _now());
+            _finalizeComplianceVerification(req, protectionDuration, automaticCountries, manualRegistration);
         }
         return true;
     }
 
-    // Authority updates an asset's compliance status directly (for manual override scenarios)
+    function _finalizeComplianceVerification(
+        ComplianceVerificationRequest storage req,
+        uint64 protectionDuration,
+        bytes32[] calldata automaticCountries,
+        bytes32[] calldata manualRegistration
+    ) internal {
+        ComplianceRecord storage cr = complianceRecords[req.assetId];
+        cr.assetId = req.assetId;
+        cr.complianceStatus = req.requestedStatus;
+        cr.countryOfOrigin = req.countryOfOrigin;
+        cr.publicationDate = req.publicationDate;
+        cr.registrationAuthority = _msgSender();
+        cr.verificationTimestamp = _now();
+        cr.complianceEvidenceUri = req.evidenceUri;
+        cr.automaticProtectionCount = uint32(automaticCountries.length);
+        cr.manualRegistrationCount = uint32(manualRegistration.length);
+        cr.protectionDuration = protectionDuration;
+        cr.isAnonymousWork = false;
+        cr.isCollectiveWork = (req.authorsCount > 1);
+        cr.renewalRequired = (protectionDuration > 0);
+        cr.nextRenewalDate = (protectionDuration > 0) ? uint64(_now() + protectionDuration) : 0;
+
+        assetInfo[req.assetId].complianceStatus = req.requestedStatus;
+        complianceAuthorities[_msgSender()].verificationCount += 1;
+
+        for (uint256 i = 0; i < automaticCountries.length; i++) {
+            bytes32 c = automaticCountries[i];
+            internationalProtection[req.assetId][c] = true;
+            automaticProtectionCountries[req.assetId].push(c);
+        }
+        for (uint256 j = 0; j < manualRegistration.length; j++) {
+            manualRegistrationCountries[req.assetId].push(manualRegistration[j]);
+        }
+
+        emit ComplianceVerified(req.assetId, req.requestedStatus, _msgSender(), req.countryOfOrigin, protectionDuration, _now());
+    }
+
     function updateComplianceStatus(uint256 assetId, bytes32 newStatus, string calldata evidenceUri) external returns (bool) {
-        ComplianceAuthority memory auth = complianceAuthorities[_msgSender()];
-        require(auth.isActive, "Not an active authority");
+        require(complianceAuthorities[_msgSender()].isActive, "Not an active authority");
 
         ComplianceRecord storage cr = complianceRecords[assetId];
         require(cr.assetId != 0, "No compliance record");
@@ -381,7 +377,6 @@ abstract contract BerneCompliance is Governance {
         return complianceRecords[assetId].complianceEvidenceUri;
     }
 
-    // Check if an asset is protected in a given country at the current time
     function checkProtectionValidity(uint256 assetId, bytes32 country) public view returns (bool) {
         ComplianceRecord memory cr = complianceRecords[assetId];
         if (cr.assetId == 0) return false;
@@ -392,10 +387,9 @@ abstract contract BerneCompliance is Governance {
         return internationalProtection[assetId][country];
     }
 
-    // Calculate protection duration in seconds for a work, given country and anonymity of the work
-    function calculateProtectionDuration(bytes32 country, bytes32 /* workType */, uint64 /* publicationDate */, bool isAnonymous) public view returns (uint64) {
+    function calculateProtectionDuration(bytes32 country, bytes32, uint64, bool isAnonymous) public view returns (uint64) {
         CountryComplianceRequirements memory req = getCountryRequirements(country);
-        uint64 secondsPerYear = 31_536_000; // seconds in 365 days
+        uint64 secondsPerYear = 31_536_000;
         if (isAnonymous) {
             return 70 * secondsPerYear;
         }
@@ -413,14 +407,13 @@ abstract contract BerneCompliance is Governance {
         require(cr.assetId != 0, "No compliance record");
         require(cr.renewalRequired, "Renewal not required");
 
-        cr.nextRenewalDate = _now() + 31_536_000;  // extend protection by 1 year
+        cr.nextRenewalDate = _now() + 31_536_000;
         cr.complianceEvidenceUri = renewalEvidenceUri;
         return true;
     }
 
     function markProtectionExpired(uint256 assetId) external returns (bool) {
-        ComplianceAuthority memory auth = complianceAuthorities[_msgSender()];
-        require(auth.isActive, "Not an active authority");
+        require(complianceAuthorities[_msgSender()].isActive, "Not an active authority");
 
         ComplianceRecord storage cr = complianceRecords[assetId];
         require(cr.assetId != 0, "No compliance record");
@@ -433,8 +426,7 @@ abstract contract BerneCompliance is Governance {
         return true;
     }
 
-    // Asset owner records manual international protection in additional countries
-    function registerInternationalProtection(uint256 assetId, bytes32[] calldata countries, string[] calldata /* evidenceUris */) external onlyAssetOwner(assetId) returns (bool) {
+    function registerInternationalProtection(uint256 assetId, bytes32[] calldata countries, string[] calldata) external onlyAssetOwner(assetId) returns (bool) {
         require(countries.length > 0, "No countries provided");
         for (uint256 i = 0; i < countries.length; i++) {
             bytes32 c = countries[i];
@@ -445,7 +437,6 @@ abstract contract BerneCompliance is Governance {
         return true;
     }
 
-    // (For completeness from Cairo version, not explicitly used in logic here)
     struct InternationalProtectionStatus {
         bytes32[] automaticCountries;
         bytes32[] manualCountries;
@@ -457,7 +448,6 @@ abstract contract BerneCompliance is Governance {
         return (uint256(cr.automaticProtectionCount), uint256(cr.manualRegistrationCount));
     }
 
-    // Validate whether a license can be granted in a certain territory under compliance rules
     function validateLicenseCompliance(uint256 assetId, bytes32 licenseeCountry, bytes32 licenseTerritory, bytes32 usageRights) external view returns (bool) {
         ComplianceRecord memory cr = complianceRecords[assetId];
         if (cr.assetId == 0) return false;
@@ -471,37 +461,27 @@ abstract contract BerneCompliance is Governance {
         return true;
     }
 
-    // Get any licensing restrictions for a given asset in a target country (e.g., registration required, etc.)
     function getLicensingRestrictions(uint256 assetId, bytes32 targetCountry) public view returns (bytes32[] memory) {
-        // If no compliance record, return NO_COMPLIANCE_RECORD restriction
         ComplianceRecord storage cr = complianceRecords[assetId];
         if (cr.assetId == 0) {
-            bytes32[] memory out = new bytes32[](1);
-            out[0] = _NO_COMPLIANCE_RECORD;
-            return out;
+            bytes32[] memory outArr = new bytes32[](1);
+            outArr[0] = _NO_COMPLIANCE_RECORD;
+            return outArr;
         }
 
         bool noProtection = !checkProtectionValidity(assetId, targetCountry);
         CountryComplianceRequirements memory req = getCountryRequirements(targetCountry);
 
-        bytes32[] memory tmp = new bytes32[](4);
+        bytes32[] memory tmpArr = new bytes32[](4);
         uint256 n = 0;
-        if (noProtection) {
-            tmp[n++] = _NO_PROTECTION;
-        }
-        if (req.noticeRequired) {
-            tmp[n++] = _NOTICE_REQUIRED;
-        }
-        if (!req.moralRightsProtected) {
-            tmp[n++] = _NO_MORAL_RIGHTS;
-        }
-        if (req.registrationRequired && !internationalProtection[assetId][targetCountry]) {
-            tmp[n++] = _REGISTRATION_REQUIRED;
-        }
+        if (noProtection) { tmpArr[n++] = _NO_PROTECTION; }
+        if (req.noticeRequired) { tmpArr[n++] = _NOTICE_REQUIRED; }
+        if (!req.moralRightsProtected) { tmpArr[n++] = _NO_MORAL_RIGHTS; }
+        if (req.registrationRequired && !internationalProtection[assetId][targetCountry]) { tmpArr[n++] = _REGISTRATION_REQUIRED; }
 
         bytes32[] memory out = new bytes32[](n);
         for (uint256 i = 0; i < n; i++) {
-            out[i] = tmp[i];
+            out[i] = tmpArr[i];
         }
         return out;
     }
@@ -544,7 +524,6 @@ abstract contract BerneCompliance is Governance {
         );
     }
 
-
     function getComplianceVerificationRequestEvidence(uint256 requestId) external view returns (string memory) {
         return complianceRequests[requestId].evidenceUri;
     }
@@ -553,7 +532,6 @@ abstract contract BerneCompliance is Governance {
         return complianceRequests[requestId].verifierNotes;
     }
 
-    // List asset IDs by compliance status
     function getAssetsByComplianceStatus(bytes32 status) external view returns (uint256[] memory) {
         uint256 total = nextAssetId - 1;
         uint256[] memory tmp = new uint256[](total);
@@ -570,7 +548,6 @@ abstract contract BerneCompliance is Governance {
         return result;
     }
 
-    // List assets requiring protection renewal within a given number of days
     function getExpiringProtections(uint64 withinDays) external view returns (uint256[] memory) {
         uint64 current = _now();
         uint64 threshold = current + withinDays * 86_400;
@@ -592,8 +569,7 @@ abstract contract BerneCompliance is Governance {
         return expiringIds;
     }
 
-    // Check if an asset’s work is in the public domain in a given country (based on protection duration)
-    function isWorkInPublicDomain(uint256 assetId, bytes32 /* country */) external view returns (bool) {
+    function isWorkInPublicDomain(uint256 assetId, bytes32) external view returns (bool) {
         ComplianceRecord memory cr = complianceRecords[assetId];
         if (cr.assetId == 0) return false;
         if (cr.protectionDuration > 0) {
